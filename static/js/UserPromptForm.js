@@ -5,6 +5,7 @@ export default {
             query_and_reply_list: [],
             is_processing: false,
             input_text: '',
+            current_processing_input_text: '',
             stored_texts: '',
         }
     },
@@ -44,7 +45,9 @@ export default {
             let options = {
                 input_text: self.input_text,
                 stream: true,
+                exclude_input: true,
             };
+            self.current_processing_input_text = self.input_text;
             console.log(options);
             axios
                 .post('/api/v1/generate_text/', options,
@@ -55,8 +58,8 @@ export default {
                             const responseText = progressEvent.event.target.responseText;
                             const regex = /"text": "([^"]+)"/g;
                             const array = [...responseText.matchAll(regex)];
-                            const text = array.map((a) => a[1]).join('');
-                            self.stored_texts = text;
+                            const generated_text = array.map((a) => a[1]).join('');
+                            self.stored_texts = generated_text;
                         },
                     }
                 )
@@ -64,11 +67,13 @@ export default {
                     const responseText = response.data;
                     const regex = /"text": "([^"]+)"/g;
                     const array = [...responseText.matchAll(regex)];
-                    const text = array.map((a) => a[1]).join('');
-                    console.log('Received', text);
-                    self.stored_texts = ""
+                    const generated_text = array.map((a) => a[1]).join('');
+                    console.log('Received', generated_text);
+                    self.current_processing_input_text = "";
+                    self.stored_texts = "";
                     self.query_and_reply_list.push({
-                        text: text
+                        prompt: options.input_text,
+                        generated_text: generated_text,
                     });
                 })
                 .catch((error) => {
@@ -91,16 +96,24 @@ export default {
                 Processing...
             </template>
             <template v-else>
-                <i class="bi bi-arrow-down fs-8"></i>
+                <i class="bi bi-send fs-8"></i>
                 Send
             </template>
         </button>
     </form>
-    {{stored_texts}}
-    <template v-for="item in query_and_reply_list.slice().reverse()">
-        <li class="list-group-item">
-            <p>{{item.text}}</p>
-        </li>
-    </template>
+    <li class="list-group-item pt-2">
+        <template v-if="stored_texts">
+            <generation-log
+                :prompt="current_processing_input_text"
+                :generated_text="stored_texts"
+            />
+        </template>
+        <template v-for="item in query_and_reply_list.slice().reverse()">
+            <generation-log
+                :prompt="item.prompt"
+                :generated_text="item.generated_text"
+            />
+        </template>
+    </li>
     `
 }

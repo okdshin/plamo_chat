@@ -23,6 +23,7 @@ class GenerateTextParams(BaseModel):
     top_k: int = 100
     top_p: float = 0.9
     temperature: float = 0.5
+    exclude_input: bool = False
     stream: bool = False
 
 
@@ -59,7 +60,7 @@ class ChatApp:
         input_ids = self.tokenizer(params.input_text).input_ids
 
         def gen():
-            streamer = TextIteratorStreamer(self.tokenizer)
+            streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=params.exclude_input)
             generation_kwargs = dict(
                 inputs=torch.LongTensor([input_ids]),
                 max_new_tokens=params.max_new_tokens,
@@ -88,6 +89,8 @@ class ChatApp:
             return self._generate_text_stream(input_ids, params)
         else:
             generated_tokens = self._generate_tokens(input_ids, params)
+            if params.exclude_input:
+                generated_tokens = generated_tokens[len(input_ids):]
             generated_text = self.tokenizer.decode(generated_tokens)
             return JSONResponse(content=dict(text=generated_text))
 

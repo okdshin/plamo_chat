@@ -12,9 +12,11 @@
 
 <script type="module">
 import UserPromptForm from '{{url_for("static", filename="js/UserPromptForm.js")}}'
+import GenerationLog from '{{url_for("static", filename="js/GenerationLog.js")}}'
 
 const app = Vue.createApp({})
 app.component("UserPromptForm", UserPromptForm)
+app.component("GenerationLog", GenerationLog)
 const vm = app.mount('#app')
 </script>
 
