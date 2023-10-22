@@ -4,7 +4,7 @@ import socket
 import json
 import torch
 from threading import Thread
-from typing import Optional, Union, List
+from typing import Any, Dict, Optional, Union, List
 
 from flask import render_template
 from flask import Flask
@@ -13,7 +13,49 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.wsgi import WSGIMiddleware
 from pydantic import BaseModel
-from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
+from transformers import (AutoTokenizer, AutoModelForCausalLM,
+                          TextIteratorStreamer, PreTrainedModel, PretrainedConfig)
+from transformers.modeling_outputs import CausalLMOutput
+
+
+class PlamoCppConfig(PretrainedConfig):  # type: ignore
+    model_type: str = "plamo_cpp"
+
+
+class PlamoCppCausalLM(PreTrainedModel):
+
+    def __init__(self, vocab_size, config: PlamoCppConfig):
+        super().__init__(config)
+        self.vocab_size = vocab_size
+
+    @property
+    def device(self) -> torch.device:
+        return torch.device("cpu")
+
+    @property
+    def dtype(self) -> torch.dtype:
+        return torch.float32
+
+    def forward(  # type: ignore
+        self,
+        input_ids: torch.LongTensor,
+        **kwargs,
+    ) -> CausalLMOutput:
+        logits = torch.rand(input_ids.size(0), 1, self.vocab_size)
+        return CausalLMOutput(
+            loss=None,
+            logits=logits,
+            hidden_states=None,
+            attentions=None,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.Tensor,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        model_inputs = {"input_ids": input_ids}
+        return model_inputs
 
 
 class GenerateTextParams(BaseModel):
@@ -42,7 +84,8 @@ class ChatApp:
         self.router.add_api_route("/api/v1/generate_text/", self.generate_text,
                                   methods=["POST"], response_model=None)
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name or model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(model_name)
+        # self.model = AutoModelForCausalLM.from_pretrained(model_name)
+        self.model = PlamoCppCausalLM(vocab_size=len(self.tokenizer), config=PlamoCppConfig())
 
     def _generate_tokens(self, input_ids, params: GenerateTextParams) -> List[int]:
         return self.model.generate(
