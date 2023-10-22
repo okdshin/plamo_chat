@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block title %}
+{{title}}
+{% endblock %}
+
+{% block headline %}
+{{title}}
+{% endblock %}
+
+{% block content %}
+
+<script type="module">
+import UserPromptForm from '{{url_for("static", filename="js/UserPromptForm.js")}}'
+
+const app = Vue.createApp({})
+app.component("UserPromptForm", UserPromptForm)
+const vm = app.mount('#app')
+</script>
+
+{% raw %}
+<div id="app" class="m-3">
+    <user-prompt-form />
+</div>
+{% endraw %}
+
+{% endblock %}
+
+{% block footer %}
+<a href="/docs">API Docs</a>
+{% endblock %}
