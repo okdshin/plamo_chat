@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from transformers import (AutoTokenizer, AutoModelForCausalLM,
                           TextIteratorStreamer, PreTrainedModel, PretrainedConfig)
 from transformers.modeling_outputs import CausalLMOutput
+import infer
 
 
 class PlamoCppConfig(PretrainedConfig):  # type: ignore
@@ -27,6 +28,11 @@ class PlamoCppCausalLM(PreTrainedModel):
     def __init__(self, vocab_size, config: PlamoCppConfig):
         super().__init__(config)
         self.vocab_size = vocab_size
+
+        #self.model = AutoModelForCausalLM.from_pretrained("gpt2")
+        self.plamo_cpp_model = infer.load_model_from_file("/home/okada/plamo_cpp/plamo-13b/ggml-model-f16.gguf", 1)  # infer.plamo_cpp_model()
+        print(self.plamo_cpp_model)
+        self.plamo_tokenzer = AutoTokenizer.from_pretrained("pfnet/plamo-13b", trust_remote_code=True)
 
     @property
     def device(self) -> torch.device:
@@ -41,7 +47,18 @@ class PlamoCppCausalLM(PreTrainedModel):
         input_ids: torch.LongTensor,
         **kwargs,
     ) -> CausalLMOutput:
-        logits = torch.rand(input_ids.size(0), 1, self.vocab_size)
+        # logits = torch.rand(input_ids.size(0), 1, self.vocab_size)
+        """
+        out = self.model(input_ids)
+        logits = out.logits
+        print("dim", logits.dim())
+        logits = logits[:, -1, :].unsqueeze(0)
+        """
+        logits = torch.from_numpy(self.plamo_cpp_model.calc_next_token_logits(
+            input_ids.numpy(), self.vocab_size))
+        print("input_ids.size()", input_ids.size(), input_ids)
+        print("input_ids decoded", self.plamo_tokenzer.decode(input_ids[0]))
+        print("logits.size()", logits.size(), logits)
         return CausalLMOutput(
             loss=None,
             logits=logits,
@@ -83,7 +100,7 @@ class ChatApp:
         self.router = APIRouter()
         self.router.add_api_route("/api/v1/generate_text/", self.generate_text,
                                   methods=["POST"], response_model=None)
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name or model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name or model_name, trust_remote_code=True)
         # self.model = AutoModelForCausalLM.from_pretrained(model_name)
         self.model = PlamoCppCausalLM(vocab_size=len(self.tokenizer), config=PlamoCppConfig())
 
