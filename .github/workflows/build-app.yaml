@@ -42,6 +42,7 @@ jobs:
         run: |
           python -c 'import site; print(site.getsitepackages())'
           python3 -c 'import site; print(site.getsitepackages())'
+          find "$(python -c 'import site; print(site.getsitepackages()[0])')"
           git clone https://github.com/okdshin/license-grep.git
           pip install -e ./license-grep
           python -m license_grep \
