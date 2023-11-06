@@ -1,0 +1,8 @@
+a2wsgi
+fastapi
+flask
+pywebview
+sentencepiece
+torch
+transformers
+uvicorn
