@@ -12,9 +12,22 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.wsgi import WSGIMiddleware
 from pydantic import BaseModel
-from transformers import AutoTokenizer, TextIteratorStreamer, PreTrainedModel, PretrainedConfig
+from transformers import (AutoTokenizer, TextIteratorStreamer, PreTrainedModel,
+                          PretrainedConfig, PreTrainedTokenizer, StoppingCriteria)
 from transformers.modeling_outputs import CausalLMOutput
 import infer
+
+
+class StopWord(StoppingCriteria):
+    def __init__(self, stop_word: str, tokenizer: PreTrainedTokenizer):
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.stop_word = stop_word
+        self.stop_tokens_len = len(tokenizer(stop_word).input_ids)
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> bool:
+        suffix_text = self.tokenizer.decode(input_ids[0][-self.stop_tokens_len:])
+        return suffix_text.endswith(self.stop_word)
 
 
 class PlamoCppConfig(PretrainedConfig):  # type: ignore
@@ -30,7 +43,7 @@ class PlamoCppCausalLM(PreTrainedModel):
         # self.model = AutoModelForCausalLM.from_pretrained("gpt2")
         self.plamo_cpp_model = infer.load_model_from_file(
             "/home/okada/plamo_cpp/plamo-13b/ggml-model-Q4_1.gguf", 8)  # infer.plamo_cpp_model()
-            #"/home/okada/plamo_cpp/plamo-13b/ggml-model-f16.gguf", 8)  # infer.plamo_cpp_model()
+        # "/home/okada/plamo_cpp/plamo-13b/ggml-model-f16.gguf", 8)  # infer.plamo_cpp_model()
         print(self.plamo_cpp_model)
         self.plamo_tokenzer = AutoTokenizer.from_pretrained(
             "pfnet/plamo-13b", trust_remote_code=True)
@@ -96,7 +109,14 @@ def make_streaming_response(json_gen):
 
 
 class ChatApp:
-    def __init__(self, tokenizer_name: Optional[str], model_name: str, prompt_template: str, n_threads: int):
+    def __init__(
+        self,
+        tokenizer_name: Optional[str],
+        model_name: str,
+        prompt_template: str,
+        stop_word: str,
+        n_threads: int,
+    ):
         self.model_name = model_name
         self.router = APIRouter()
         self.router.add_api_route("/api/v1/generate_text/", self.generate_text,
@@ -107,6 +127,8 @@ class ChatApp:
         self.model = PlamoCppCausalLM(vocab_size=len(self.tokenizer), config=PlamoCppConfig())
 
         self.prompt_template = prompt_template
+        print(f"stop_word `{stop_word}`")
+        self.stop_word = StopWord(stop_word=stop_word, tokenizer=self.tokenizer)
 
     def _generate_tokens(self, input_ids, params: GenerateTextParams) -> List[int]:
         return self.model.generate(
@@ -117,6 +139,7 @@ class ChatApp:
             top_p=params.top_p,
             temperature=params.temperature,
             use_cache=True,
+            stopping_criteria=[self.stop_words],
         )[0]
 
     def _generate_text_stream(self, input_ids, params: GenerateTextParams) -> StreamingResponse:
@@ -133,6 +156,7 @@ class ChatApp:
                 temperature=params.temperature,
                 streamer=streamer,
                 use_cache=True,
+                stopping_criteria=[self.stop_words],
             )
             thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
             thread.start()
@@ -184,10 +208,13 @@ if __name__ == "__main__":
     parser.add_argument("--model-name", type=str, default="gpt2")
     parser.add_argument("--tokenizer-name", type=str)
     parser.add_argument("--prompt-template-path", type=str)
+    parser.add_argument("--stop-word", type=str)
     parser.add_argument("--open", type=str, choices=["none", "browser", "gui"], default="browser")
     parser.add_argument("--gui-scale", type=str, default="100%")
     args = parser.parse_args()
     print(args)
+
+    args.stop_word = args.stop_word.replace("\\n", "\n")
 
     with open(args.prompt_template_path) as f:
         prompt_template = f.read()
@@ -198,7 +225,7 @@ if __name__ == "__main__":
     import uvicorn
     chat_app = ChatApp(n_threads=args.n_threads,
                        tokenizer_name=args.tokenizer_name, model_name=args.model_name,
-                       prompt_template=prompt_template)
+                       prompt_template=prompt_template, stop_word=args.stop_word)
     fast_api_app = FastAPI()
     fast_api_app.include_router(chat_app.router)
     fast_api_app.mount("/", WSGIMiddleware(flask_app))
