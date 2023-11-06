@@ -4,7 +4,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "llama.cpp/llama.h"
+#include <llama.h>
 
 namespace {
 
