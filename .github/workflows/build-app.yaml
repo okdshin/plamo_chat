@@ -41,9 +41,10 @@ jobs:
       - name: List licenses
         run: |
           python -c 'import site; print(site.getsitepackages())'
+          python3 -c 'import site; print(site.getsitepackages())'
           git clone https://github.com/okdshin/license-grep.git
           pip install -e ./license-grep
-          python3 -m license_grep \
+          python -m license_grep \
             --py "$(python -c 'import site; print(site.getsitepackages()[0])')" \
             --write-json license-info.json \
             --write-table table.md \
