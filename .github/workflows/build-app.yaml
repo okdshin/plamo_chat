@@ -19,7 +19,7 @@ jobs:
         run: |
           cmake -B build_infer
           cmake --build build_infer
-          find build_infer -name infer\*.so | xargs -I{} ln -s {}
+          ln -s "$(find build_infer -name infer\*.so)"
       - name: Build the app
         run: |
           python -m PyInstaller app.py --noconfirm \
