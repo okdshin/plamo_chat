@@ -8,13 +8,13 @@ jobs:
         uses: actions/checkout@v4
       - name: Install PyInstaller
         run: |
-          pip install pyinstaller
+          python -m pip install pyinstaller
           pyinstaller --version
       - name: Install Requirements
         run: |
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements.txt
-          pip freeze
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r requirements.txt
+          python -m pip freeze
       - name: Build infer.so
         run: |
           cmake -B build_infer
