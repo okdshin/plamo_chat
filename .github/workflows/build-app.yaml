@@ -38,3 +38,15 @@ jobs:
             --copy-metadata torch
       - name: List output files
         run: find ./dist
+      - name: List licenses
+        run: |
+          git clone https://github.com/okdshin/license-grep.git
+          pip install license-grep
+          python3 -m license_grep \
+            --py "$(python -c 'import site; print(site.getsitepackages()[0])')" \
+            --write-json license-info.json \
+            --write-table table.md \
+            --write-grouped-markdown grouped.md \
+            --dump-unknown-licenses
+          cat grouped.md
+
