@@ -36,13 +36,13 @@ class PlamoCppConfig(PretrainedConfig):  # type: ignore
 
 class PlamoCppCausalLM(PreTrainedModel):
 
-    def __init__(self, vocab_size, config: PlamoCppConfig):
+    def __init__(self, vocab_size, config: PlamoCppConfig, n_threads):
         super().__init__(config)
         self.vocab_size = vocab_size
 
         # self.model = AutoModelForCausalLM.from_pretrained("gpt2")
         self.plamo_cpp_model = infer.load_model_from_file(
-            "/home/okada/plamo_cpp/plamo-13b/ggml-model-Q4_1.gguf", 8)  # infer.plamo_cpp_model()
+            "/home/okada/plamo_cpp/plamo-13b/ggml-model-Q4_1.gguf", n_threads)  # infer.plamo_cpp_model()
         # "/home/okada/plamo_cpp/plamo-13b/ggml-model-f16.gguf", 8)  # infer.plamo_cpp_model()
         print(self.plamo_cpp_model)
         self.plamo_tokenzer = AutoTokenizer.from_pretrained(
@@ -124,7 +124,8 @@ class ChatApp:
         self.tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_name or model_name, trust_remote_code=True)
         # self.model = AutoModelForCausalLM.from_pretrained(model_name)
-        self.model = PlamoCppCausalLM(vocab_size=len(self.tokenizer), config=PlamoCppConfig())
+        self.model = PlamoCppCausalLM(vocab_size=len(self.tokenizer),
+                                      config=PlamoCppConfig(), n_threads=n_threads)
 
         self.prompt_template = prompt_template
         print(f"stop_word `{stop_word}`")
