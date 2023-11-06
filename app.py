@@ -1,5 +1,4 @@
 import argparse
-import time
 import socket
 import json
 import torch
@@ -13,8 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.wsgi import WSGIMiddleware
 from pydantic import BaseModel
-from transformers import (AutoTokenizer, AutoModelForCausalLM,
-                          TextIteratorStreamer, PreTrainedModel, PretrainedConfig)
+from transformers import AutoTokenizer, TextIteratorStreamer, PreTrainedModel, PretrainedConfig
 from transformers.modeling_outputs import CausalLMOutput
 import infer
 
@@ -29,10 +27,13 @@ class PlamoCppCausalLM(PreTrainedModel):
         super().__init__(config)
         self.vocab_size = vocab_size
 
-        #self.model = AutoModelForCausalLM.from_pretrained("gpt2")
-        self.plamo_cpp_model = infer.load_model_from_file("/home/okada/plamo_cpp/plamo-13b/ggml-model-f16.gguf", 1)  # infer.plamo_cpp_model()
+        # self.model = AutoModelForCausalLM.from_pretrained("gpt2")
+        self.plamo_cpp_model = infer.load_model_from_file(
+            "/home/okada/plamo_cpp/plamo-13b/ggml-model-Q4_1.gguf", 8)  # infer.plamo_cpp_model()
+            #"/home/okada/plamo_cpp/plamo-13b/ggml-model-f16.gguf", 8)  # infer.plamo_cpp_model()
         print(self.plamo_cpp_model)
-        self.plamo_tokenzer = AutoTokenizer.from_pretrained("pfnet/plamo-13b", trust_remote_code=True)
+        self.plamo_tokenzer = AutoTokenizer.from_pretrained(
+            "pfnet/plamo-13b", trust_remote_code=True)
 
     @property
     def device(self) -> torch.device:
@@ -56,9 +57,9 @@ class PlamoCppCausalLM(PreTrainedModel):
         """
         logits = torch.from_numpy(self.plamo_cpp_model.calc_next_token_logits(
             input_ids.numpy(), self.vocab_size))
-        print("input_ids.size()", input_ids.size(), input_ids)
+        # print("input_ids.size()", input_ids.size(), input_ids)
         print("input_ids decoded", self.plamo_tokenzer.decode(input_ids[0]))
-        print("logits.size()", logits.size(), logits)
+        # print("logits.size()", logits.size(), logits)
         return CausalLMOutput(
             loss=None,
             logits=logits,
@@ -77,11 +78,11 @@ class PlamoCppCausalLM(PreTrainedModel):
 
 class GenerateTextParams(BaseModel):
     input_text: str = ""
-    max_new_tokens: int = 32
+    max_new_tokens: int = 128
     do_sample: bool = True
     top_k: int = 100
     top_p: float = 0.9
-    temperature: float = 0.5
+    temperature: float = 1.0
     exclude_input: bool = False
     stream: bool = False
 
@@ -95,14 +96,17 @@ def make_streaming_response(json_gen):
 
 
 class ChatApp:
-    def __init__(self, tokenizer_name: Optional[str], model_name: str, n_threads: int):
+    def __init__(self, tokenizer_name: Optional[str], model_name: str, prompt_template: str, n_threads: int):
         self.model_name = model_name
         self.router = APIRouter()
         self.router.add_api_route("/api/v1/generate_text/", self.generate_text,
                                   methods=["POST"], response_model=None)
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name or model_name, trust_remote_code=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name or model_name, trust_remote_code=True)
         # self.model = AutoModelForCausalLM.from_pretrained(model_name)
         self.model = PlamoCppCausalLM(vocab_size=len(self.tokenizer), config=PlamoCppConfig())
+
+        self.prompt_template = prompt_template
 
     def _generate_tokens(self, input_ids, params: GenerateTextParams) -> List[int]:
         return self.model.generate(
@@ -117,7 +121,6 @@ class ChatApp:
 
     def _generate_text_stream(self, input_ids, params: GenerateTextParams) -> StreamingResponse:
         assert params.stream
-        input_ids = self.tokenizer(params.input_text).input_ids
 
         def gen():
             streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=params.exclude_input)
@@ -144,7 +147,8 @@ class ChatApp:
 
     def generate_text(self, params: GenerateTextParams) -> Union[JSONResponse, StreamingResponse]:
         print("received", params)
-        input_ids = self.tokenizer(params.input_text).input_ids
+        prompt = self.prompt_template.format(input_text=params.input_text)
+        input_ids = self.tokenizer(prompt).input_ids
         if params.stream:
             return self._generate_text_stream(input_ids, params)
         else:
@@ -179,17 +183,22 @@ if __name__ == "__main__":
     parser.add_argument("--n-threads", type=int, default=4)
     parser.add_argument("--model-name", type=str, default="gpt2")
     parser.add_argument("--tokenizer-name", type=str)
+    parser.add_argument("--prompt-template-path", type=str)
     parser.add_argument("--open", type=str, choices=["none", "browser", "gui"], default="browser")
     parser.add_argument("--gui-scale", type=str, default="100%")
     args = parser.parse_args()
     print(args)
+
+    with open(args.prompt_template_path) as f:
+        prompt_template = f.read()
 
     if args.port is None:
         args.port = find_free_port()
     print(f"load from \"{args.model_name}\"")
     import uvicorn
     chat_app = ChatApp(n_threads=args.n_threads,
-                       tokenizer_name=args.tokenizer_name, model_name=args.model_name)
+                       tokenizer_name=args.tokenizer_name, model_name=args.model_name,
+                       prompt_template=prompt_template)
     fast_api_app = FastAPI()
     fast_api_app.include_router(chat_app.router)
     fast_api_app.mount("/", WSGIMiddleware(flask_app))
