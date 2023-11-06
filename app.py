@@ -139,7 +139,7 @@ class ChatApp:
             top_p=params.top_p,
             temperature=params.temperature,
             use_cache=True,
-            stopping_criteria=[self.stop_words],
+            stopping_criteria=[self.stop_word],
         )[0]
 
     def _generate_text_stream(self, input_ids, params: GenerateTextParams) -> StreamingResponse:
@@ -156,7 +156,7 @@ class ChatApp:
                 temperature=params.temperature,
                 streamer=streamer,
                 use_cache=True,
-                stopping_criteria=[self.stop_words],
+                stopping_criteria=[self.stop_word],
             )
             thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
             thread.start()
