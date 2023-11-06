@@ -40,6 +40,7 @@ jobs:
         run: find ./dist
       - name: List licenses
         run: |
+          python -c 'import site; print(site.getsitepackages())'
           git clone https://github.com/okdshin/license-grep.git
           pip install -e ./license-grep
           python3 -m license_grep \
